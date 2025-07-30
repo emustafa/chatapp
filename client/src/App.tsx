@@ -1,76 +1,103 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAuth0 } from '@auth0/auth0-react';
-import axios from 'axios';
+import { useWebSocket } from './hooks/useWebSocket';
+import MessageList from './components/MessageList';
+import MessageInput from './components/MessageInput';
+import ChatHeader from './components/ChatHeader';
 import './App.css';
 
 function App() {
   const { loginWithRedirect, logout, user, isAuthenticated, isLoading, getAccessTokenSilently } = useAuth0();
   const [message, setMessage] = useState('');
-  const [status, setStatus] = useState('');
+  
+  const {
+    streamMessages,
+    currentStreamingMessage,
+    isStreaming,
+    isConnected,
+    status,
+    connectWebSocket,
+    sendMessage: sendWebSocketMessage,
+    clearMessages
+  } = useWebSocket(getAccessTokenSilently);
 
-  const sendMessage = async () => {
-    if (!message.trim()) {
-      setStatus('Please enter a message');
-      return;
+  useEffect(() => {
+    if (isAuthenticated) {
+      connectWebSocket();
     }
+  }, [isAuthenticated, connectWebSocket]);
 
-    try {
-      const token = await getAccessTokenSilently();
-      const response = await axios.post('http://localhost:3001/api/message', {
-        message: message
-      }, {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      });
-      
-      if (response.data.ack) {
-        setStatus('Message sent successfully!');
-        setMessage('');
-      }
-    } catch (error) {
-      setStatus('Failed to send message');
-      console.error('Error sending message:', error);
-    }
+  const handleSendMessage = () => {
+    sendWebSocketMessage(message);
+    setMessage('');
+  };
+
+  const handleLogout = () => {
+    logout({ logoutParams: { returnTo: window.location.origin } });
   };
 
   if (isLoading) return <div>Loading...</div>;
 
   return (
     <div className="App">
-      <header className="App-header">
-        <h1>Message App</h1>
+      <div style={{ 
+        backgroundColor: '#fff', 
+        minHeight: '100vh', 
+        color: '#333',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center'
+      }}>
+        <div style={{ 
+          textAlign: 'center', 
+          padding: '20px 0', 
+          backgroundColor: '#f8f9fa', 
+          borderBottom: '1px solid #e0e0e0',
+          width: '100%'
+        }}>
+          <h1 style={{ color: '#333', margin: 0 }}>Message App</h1>
+        </div>
         
         {!isAuthenticated ? (
-          <div>
-            <h2>Please log in to continue</h2>
+          <div style={{ textAlign: 'center', padding: '50px', color: '#333' }}>
+            <h2 style={{ color: '#333' }}>Please log in to continue</h2>
             <button onClick={() => loginWithRedirect()}>
               Log In
             </button>
           </div>
         ) : (
-          <div>
-            <h2>Welcome, {user?.name}!</h2>
-            <div style={{ margin: '20px 0' }}>
-              <textarea
-                value={message}
-                onChange={(e) => setMessage(e.target.value)}
-                placeholder="Enter your message here..."
-                style={{ width: '300px', height: '100px', padding: '10px' }}
-              />
-            </div>
-            <div>
-              <button onClick={sendMessage} style={{ marginRight: '10px' }}>
-                Send Message
-              </button>
-              <button onClick={() => logout({ logoutParams: { returnTo: window.location.origin } })}>
-                Log Out
-              </button>
-            </div>
-            {status && <p style={{ marginTop: '10px' }}>{status}</p>}
+          <div style={{ 
+            display: 'flex', 
+            flexDirection: 'column', 
+            height: 'calc(100vh - 80px)',
+            width: '100%',
+            maxWidth: '800px',
+            position: 'relative'
+          }}>
+            <ChatHeader
+              userName={user?.name || 'User'}
+              isConnected={isConnected}
+              streamMessages={streamMessages}
+              clearMessages={clearMessages}
+              logout={handleLogout}
+            />
+
+            <MessageList
+              streamMessages={streamMessages}
+              currentStreamingMessage={currentStreamingMessage}
+              isStreaming={isStreaming}
+            />
+
+            <MessageInput
+              message={message}
+              setMessage={setMessage}
+              sendMessage={handleSendMessage}
+              isConnected={isConnected}
+              status={status}
+            />
           </div>
         )}
-      </header>
+      </div>
     </div>
   );
 }
