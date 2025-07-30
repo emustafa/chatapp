@@ -47,3 +47,47 @@ resource "aws_dynamodb_table" "sessions" {
     Environment = var.environment
   }
 }
+
+resource "aws_dynamodb_table" "chat_threads" {
+  name           = "ChatThreads"
+  billing_mode   = "PAY_PER_REQUEST"
+  hash_key       = "userId"
+  range_key      = "threadId"
+
+  attribute {
+    name = "userId"
+    type = "S"
+  }
+
+  attribute {
+    name = "threadId"
+    type = "S"
+  }
+
+  tags = {
+    Name        = "ChatThreads"
+    Environment = var.environment
+  }
+}
+
+resource "aws_dynamodb_table" "messages" {
+  name           = "Messages"
+  billing_mode   = "PAY_PER_REQUEST"
+  hash_key       = "threadId"
+  range_key      = "messageId"
+
+  attribute {
+    name = "threadId"
+    type = "S"
+  }
+
+  attribute {
+    name = "messageId"
+    type = "S"
+  }
+
+  tags = {
+    Name        = "Messages"
+    Environment = var.environment
+  }
+}

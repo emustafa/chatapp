@@ -1,12 +1,6 @@
 import { useState, useRef, useCallback } from 'react';
-
-interface StreamMessage {
-  type: string;
-  content?: string;
-  timestamp?: string;
-  user?: { name: string; email: string };
-  message?: string;
-}
+import { StreamMessage, WebSocketMessage } from '../types';
+import { API_CONFIG, WS_EVENTS, STATUS_MESSAGES, ERROR_MESSAGES } from '../config/constants';
 
 interface UseWebSocketReturn {
   streamMessages: StreamMessage[];
@@ -15,8 +9,10 @@ interface UseWebSocketReturn {
   isConnected: boolean;
   status: string;
   connectWebSocket: () => void;
+  joinThread: (threadId: string) => void;
   sendMessage: (message: string) => void;
-  clearMessages: () => void;
+  setMessages: (messages: StreamMessage[]) => void;
+  disconnect: () => void;
 }
 
 export const useWebSocket = (getAccessTokenSilently: () => Promise<string>): UseWebSocketReturn => {
@@ -26,135 +22,184 @@ export const useWebSocket = (getAccessTokenSilently: () => Promise<string>): Use
   const [isConnected, setIsConnected] = useState(false);
   const [status, setStatus] = useState('');
   const wsRef = useRef<WebSocket | null>(null);
+  const streamingMessageRef = useRef<string>('');
 
   const connectWebSocket = useCallback(async () => {
+    // Close existing connection if any
+    if (wsRef.current) {
+      wsRef.current.close();
+      wsRef.current = null;
+    }
+
     try {
       const token = await getAccessTokenSilently();
-      const ws = new WebSocket('ws://localhost:3001');
+      const ws = new WebSocket(API_CONFIG.WS_URL);
       
       ws.onopen = () => {
         console.log('WebSocket connected');
-        setStatus('Connecting...');
+        setStatus(STATUS_MESSAGES.CONNECTING);
         
         ws.send(JSON.stringify({
-          type: 'auth',
+          type: WS_EVENTS.AUTH,
           token: token
         }));
       };
 
       ws.onmessage = (event) => {
         try {
-          const data: StreamMessage = JSON.parse(event.data);
+          const data: WebSocketMessage = JSON.parse(event.data);
           
           switch (data.type) {
-            case 'auth_success':
+            case WS_EVENTS.AUTH_SUCCESS:
               setIsConnected(true);
-              setStatus('Connected! Ready to send messages.');
-              setStreamMessages(prev => [...prev, {
-                type: 'system',
-                content: `Connected as ${data.user?.name}`,
-                timestamp: new Date().toISOString()
-              }]);
+              setStatus(STATUS_MESSAGES.CONNECTED);
               break;
               
-            case 'auth_error':
-              setStatus('Authentication failed');
+            case WS_EVENTS.THREAD_JOINED:
+              setStatus(STATUS_MESSAGES.READY);
+              break;
+              
+            case WS_EVENTS.AUTH_ERROR:
+              setStatus(STATUS_MESSAGES.AUTH_FAILED);
               setIsConnected(false);
+              console.error('WebSocket authentication failed');
               break;
               
-            case 'message_received':
+            case WS_EVENTS.MESSAGE_RECEIVED:
               setStreamMessages(prev => [...prev, {
-                type: 'confirmation',
-                content: data.content,
+                type: 'user',
+                content: data.content || '',
                 timestamp: new Date().toISOString()
               }]);
               setCurrentStreamingMessage('');
               setIsStreaming(true);
               break;
               
-            case 'stream_start':
+            case WS_EVENTS.STREAM_START:
+              streamingMessageRef.current = '';
               setCurrentStreamingMessage('');
               setIsStreaming(true);
               break;
               
-            case 'stream_message':
-              setCurrentStreamingMessage(prev => prev + (data.content || ''));
+            case WS_EVENTS.STREAM_MESSAGE:
+              streamingMessageRef.current += (data.content || '');
+              setCurrentStreamingMessage(streamingMessageRef.current);
               break;
               
-            case 'stream_end':
-              setIsStreaming(false);
-              setCurrentStreamingMessage(current => {
-                if (current) {
-                  setStreamMessages(prev => [...prev, {
-                    type: 'response',
-                    content: current,
-                    timestamp: new Date().toISOString()
-                  }]);
-                }
-                return '';
-              });
+            case WS_EVENTS.STREAM_END:
+              // Add the complete message and clear streaming
+              if (streamingMessageRef.current.trim()) {
+                const completedMessage = {
+                  type: 'assistant' as const,
+                  content: streamingMessageRef.current,
+                  timestamp: new Date().toISOString()
+                };
+                
+                // Add to messages immediately
+                setStreamMessages(prev => [...prev, completedMessage]);
+                
+                // Clear streaming state immediately
+                setIsStreaming(false);
+                
+                // Clear the streaming message after a small delay to ensure smooth transition
+                setTimeout(() => {
+                  setCurrentStreamingMessage('');
+                }, 100);
+                
+                streamingMessageRef.current = '';
+              } else {
+                // Clear streaming state even if no message
+                streamingMessageRef.current = '';
+                setCurrentStreamingMessage('');
+                setIsStreaming(false);
+              }
               break;
               
-            case 'error':
+            case WS_EVENTS.ERROR:
               setStatus(`Error: ${data.message}`);
+              console.error('WebSocket error:', data.message);
               break;
               
             default:
               console.log('Unknown message type:', data);
           }
         } catch (error) {
-          console.error('Error parsing WebSocket message:', error);
+          console.error(ERROR_MESSAGES.WS_PARSE_ERROR, error);
         }
       };
 
       ws.onclose = () => {
         console.log('WebSocket disconnected');
         setIsConnected(false);
-        setStatus('Disconnected');
+        setStatus(STATUS_MESSAGES.DISCONNECTED);
         wsRef.current = null;
       };
 
       ws.onerror = (error) => {
         console.error('WebSocket error:', error);
-        setStatus('Connection error');
+        setStatus(STATUS_MESSAGES.CONNECTION_ERROR);
         setIsConnected(false);
       };
 
       wsRef.current = ws;
     } catch (error) {
       console.error('Error connecting to WebSocket:', error);
-      setStatus('Failed to connect');
+      setStatus(STATUS_MESSAGES.FAILED_TO_CONNECT);
     }
   }, [getAccessTokenSilently]);
 
-  const sendMessage = useCallback((message: string) => {
-    if (!message.trim()) {
-      setStatus('Please enter a message');
-      return;
-    }
-
+  const joinThread = useCallback((threadId: string) => {
     if (!wsRef.current || !isConnected) {
-      setStatus('Not connected to server');
+      setStatus(STATUS_MESSAGES.NOT_CONNECTED);
       return;
     }
 
     try {
       wsRef.current.send(JSON.stringify({
-        type: 'message',
-        content: message
+        type: WS_EVENTS.JOIN_THREAD,
+        threadId: threadId
       }));
-      
-      setStatus('Message sent! Listening for stream...');
     } catch (error) {
-      console.error('Error sending message:', error);
-      setStatus('Failed to send message');
+      console.error('Error joining thread:', error);
+      setStatus(ERROR_MESSAGES.WS_JOIN_ERROR);
     }
   }, [isConnected]);
 
-  const clearMessages = useCallback(() => {
-    setStreamMessages([]);
-    setCurrentStreamingMessage('');
-    setIsStreaming(false);
+  const sendMessage = useCallback((message: string) => {
+    if (!message.trim()) {
+      setStatus(STATUS_MESSAGES.ENTER_MESSAGE);
+      return;
+    }
+
+    if (!wsRef.current || !isConnected) {
+      setStatus(STATUS_MESSAGES.NOT_CONNECTED);
+      return;
+    }
+
+    try {
+      wsRef.current.send(JSON.stringify({
+        type: WS_EVENTS.MESSAGE,
+        content: message
+      }));
+      
+      setStatus(STATUS_MESSAGES.MESSAGE_SENT);
+    } catch (error) {
+      console.error('Error sending message:', error);
+      setStatus(ERROR_MESSAGES.MESSAGE_SEND_FAILED);
+    }
+  }, [isConnected]);
+
+  const setMessages = useCallback((messages: StreamMessage[]) => {
+    setStreamMessages(messages);
+  }, []);
+
+  const disconnect = useCallback(() => {
+    if (wsRef.current) {
+      wsRef.current.close();
+      wsRef.current = null;
+    }
+    setIsConnected(false);
+    setStatus(STATUS_MESSAGES.DISCONNECTED);
   }, []);
 
   return {
@@ -164,7 +209,9 @@ export const useWebSocket = (getAccessTokenSilently: () => Promise<string>): Use
     isConnected,
     status,
     connectWebSocket,
+    joinThread,
     sendMessage,
-    clearMessages
+    setMessages,
+    disconnect
   };
 };

@@ -11,16 +11,12 @@ interface StreamMessage {
 interface ChatHeaderProps {
   userName: string;
   isConnected: boolean;
-  streamMessages: StreamMessage[];
-  clearMessages: () => void;
   logout: () => void;
 }
 
 const ChatHeader: React.FC<ChatHeaderProps> = ({
   userName,
   isConnected,
-  streamMessages,
-  clearMessages,
   logout
 }) => {
   return (
@@ -38,17 +34,6 @@ const ChatHeader: React.FC<ChatHeaderProps> = ({
         }}>
           {isConnected ? '🟢 Connected' : '🔴 Disconnected'}
         </span>
-        <button 
-          onClick={clearMessages} 
-          style={{ 
-            marginLeft: '20px',
-            padding: '5px 10px',
-            fontSize: '12px'
-          }}
-          disabled={streamMessages.length === 0}
-        >
-          Clear Messages
-        </button>
         <button 
           onClick={logout}
           style={{ 

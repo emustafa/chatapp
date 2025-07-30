@@ -5,6 +5,7 @@ interface MessageInputProps {
   setMessage: (message: string) => void;
   sendMessage: () => void;
   isConnected: boolean;
+  canSend: boolean;
   status: string;
 }
 
@@ -13,6 +14,7 @@ const MessageInput: React.FC<MessageInputProps> = ({
   setMessage,
   sendMessage,
   isConnected,
+  canSend,
   status
 }) => {
   const handleKeyPress = (e: React.KeyboardEvent) => {
@@ -68,22 +70,22 @@ const MessageInput: React.FC<MessageInputProps> = ({
             fontFamily: 'inherit',
             fontSize: '15px'
           }}
-          disabled={!isConnected}
+          disabled={false}
           onKeyPress={handleKeyPress}
         />
         <button 
           onClick={sendMessage} 
           style={{ 
             padding: '12px 24px',
-            backgroundColor: isConnected && message.trim() ? '#007bff' : '#ccc',
+            backgroundColor: canSend && message.trim() ? '#007bff' : '#ccc',
             color: 'white',
             border: 'none',
             borderRadius: '8px',
-            cursor: isConnected && message.trim() ? 'pointer' : 'not-allowed',
+            cursor: canSend && message.trim() ? 'pointer' : 'not-allowed',
             fontSize: '15px',
             fontWeight: 'bold'
           }}
-          disabled={!isConnected || !message.trim()}
+          disabled={!canSend || !message.trim()}
         >
           Send
         </button>

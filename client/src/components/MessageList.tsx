@@ -37,9 +37,9 @@ const MessageList: React.FC<MessageListProps> = ({
                 padding: '16px',
                 borderRadius: '12px',
                 backgroundColor: msg.type === 'system' ? '#e3f2fd' : 
-                               msg.type === 'confirmation' ? '#f0f8ff' : '#ffffff',
+                               msg.type === 'user' ? '#f0f8ff' : '#ffffff',
                 border: `1px solid ${msg.type === 'system' ? '#2196f3' : 
-                                     msg.type === 'confirmation' ? '#4a90e2' : '#e0e0e0'}`,
+                                     msg.type === 'user' ? '#4a90e2' : '#e0e0e0'}`,
                 maxWidth: '700px',
                 wordWrap: 'break-word',
                 overflowWrap: 'break-word'
@@ -51,8 +51,8 @@ const MessageList: React.FC<MessageListProps> = ({
                 marginBottom: '8px',
                 fontWeight: 'bold'
               }}>
-                {msg.type === 'confirmation' ? 'You' : 
-                 msg.type === 'response' ? 'Assistant' : 
+                {msg.type === 'user' ? 'You' : 
+                 msg.type === 'assistant' ? 'Assistant' : 
                  msg.type.toUpperCase()} 
                 <span style={{ fontWeight: 'normal', marginLeft: '8px' }}>
                   {new Date(msg.timestamp || '').toLocaleTimeString()}
@@ -70,7 +70,7 @@ const MessageList: React.FC<MessageListProps> = ({
           ))}
           
           {/* Current streaming message */}
-          {isStreaming && (
+          {(isStreaming || currentStreamingMessage) && (
             <div 
               style={{ 
                 margin: '20px 0',
@@ -89,7 +89,7 @@ const MessageList: React.FC<MessageListProps> = ({
                 marginBottom: '8px',
                 fontWeight: 'bold'
               }}>
-                Assistant <span style={{ color: '#4caf50' }}>• typing...</span>
+                Assistant {isStreaming && <span style={{ color: '#4caf50' }}>• typing...</span>}
               </div>
               <div style={{ 
                 whiteSpace: 'pre-wrap',
@@ -98,13 +98,15 @@ const MessageList: React.FC<MessageListProps> = ({
                 color: '#333'
               }}>
                 {currentStreamingMessage}
-                <span style={{ 
-                  animation: 'blink 1s infinite',
-                  color: '#4caf50',
-                  fontWeight: 'bold'
-                }}>
-                  |
-                </span>
+                {isStreaming && (
+                  <span style={{ 
+                    animation: 'blink 1s infinite',
+                    color: '#4caf50',
+                    fontWeight: 'bold'
+                  }}>
+                    |
+                  </span>
+                )}
               </div>
             </div>
           )}
